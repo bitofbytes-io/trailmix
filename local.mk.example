@@ -1,0 +1,13 @@
+# Copy this file to local.mk and fill in your values.
+# local.mk is gitignored. `make up` does not need it.
+
+# Matches the default docker-compose.yml database.
+export DATABASE_URL=postgres://trailmix:trailmix@127.0.0.1:5432/trailmix?sslmode=disable
+export PORT=4600
+export LOG_LEVEL=debug
+# Set to false for local HTTP. Defaults to true.
+export SECURE_COOKIES=false
+
+# Used by repository and migration tests. Same database is fine: tests use a
+# throwaway schema and drop it.
+export TRAILMIX_TEST_DATABASE_URL=postgres://trailmix:trailmix@127.0.0.1:5432/trailmix?sslmode=disable

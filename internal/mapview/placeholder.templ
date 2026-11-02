@@ -1,0 +1,35 @@
+package mapview
+
+// Map renders the placeholder. It does not request a tile server.
+templ Map(lines []ProjectedLine) {
+	<figure class="map-frame">
+		<svg viewBox="0 0 800 420" aria-hidden="true">
+			<rect width="800" height="420" class="map-surface"></rect>
+			for _, line := range lines {
+				<a href={ templ.URL("/trails/" + line.ID) }>
+					if line.Selected {
+						<polyline points={ line.PointsAttr } class="map-line map-line-selected">
+							<title>{ line.Name }</title>
+						</polyline>
+					} else {
+						<polyline points={ line.PointsAttr } class="map-line">
+							<title>{ line.Name }</title>
+						</polyline>
+					}
+				</a>
+			}
+		</svg>
+		<figcaption>
+			<p>Map placeholder. No tile provider is connected.</p>
+			if len(lines) == 0 {
+				<p>No trails to draw.</p>
+			} else {
+				<ul>
+					for _, line := range lines {
+						<li><a href={ templ.URL("/trails/" + line.ID) }>{ line.Name }</a></li>
+					}
+				</ul>
+			}
+		</figcaption>
+	</figure>
+}

@@ -1,0 +1,50 @@
+package pages
+
+import "github.com/bitofbytes-io/trailmix/internal/ui/layout"
+
+templ EntryPage(v EntryView) {
+	@layout.Base(v.TrailName, "log") {
+		<main id="content" class="wrap">
+			<p class="meta"><a href={ templ.URL(v.Href) }>Back to the log</a> · <a href={ templ.URL(v.TrailHref) }>{ v.TrailName }</a></p>
+			<h1>{ v.TrailName }</h1>
+			<p class="lede">{ v.Distance } · { v.Dog }</p>
+			if v.HasPhoto {
+				<img class="photo" src={ v.PhotoURL } alt={ v.TrailName + " photo" }/>
+			} else {
+				<div class="photo-placeholder">Photo</div>
+			}
+			if v.Error != "" {
+				<p class="alert" role="alert">{ v.Error }</p>
+			}
+			<form method="post" action={ templ.URL("/log/" + v.ID) } enctype="multipart/form-data">
+				@entryFields(v.VisitedISO, v.Notes, v.DurationInput)
+				@removePhoto(v.HasPhoto)
+				<button class="button" type="submit">Save entry</button>
+			</form>
+			<form class="danger-form" method="post" action={ templ.URL("/log/" + v.ID + "/delete") }>
+				<button class="button button-quiet" type="submit">Delete entry</button>
+			</form>
+		</main>
+	}
+}
+
+templ removePhoto(hasPhoto bool) {
+	if hasPhoto {
+		<div class="field">
+			<label class="check" for="remove_photo">
+				<input id="remove_photo" name="remove_photo" type="checkbox" value="1"/>
+				Remove the current photo
+			</label>
+		</div>
+	}
+}
+
+templ NoticePage(title string, message string) {
+	@layout.Base(title, "") {
+		<main id="content" class="wrap">
+			<h1>{ title }</h1>
+			<p>{ message }</p>
+			<p class="actions"><a href="/">Back to the log</a></p>
+		</main>
+	}
+}

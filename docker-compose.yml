@@ -1,0 +1,63 @@
+# Local Trail Mix: Postgres plus the app. Migrations seed a dozen sample trails.
+# The database password is a local default, not a production secret. Override
+# POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB together if you change it.
+# Use URL-safe characters; the password is placed in DATABASE_URL as-is.
+
+name: trailmix
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-trailmix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trailmix}
+      POSTGRES_DB: ${POSTGRES_DB:-trailmix}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - trailmix-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+    image: trailmix:local
+    command: ["./trailmix-migrate"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-trailmix}:${POSTGRES_PASSWORD:-trailmix}@db:5432/${POSTGRES_DB:-trailmix}?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+    image: trailmix:local
+    command: ["./trailmix"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-trailmix}:${POSTGRES_PASSWORD:-trailmix}@db:5432/${POSTGRES_DB:-trailmix}?sslmode=disable
+      PORT: "4600"
+      SECURE_COOKIES: "false"
+      LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:4600:4600"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:4600/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  trailmix-postgres:
