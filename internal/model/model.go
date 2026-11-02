@@ -91,6 +91,12 @@ type DogRule struct {
 	Label string
 }
 
+// Point is a WGS84 location. Lon is longitude, Lat is latitude.
+type Point struct {
+	Lon float64
+	Lat float64
+}
+
 // LineString is a GeoJSON LineString. Coordinates are [longitude, latitude].
 type LineString struct {
 	Type        string      `json:"type"`
@@ -115,7 +121,8 @@ func (g LineString) Points() ([][2]float64, error) {
 	return points, nil
 }
 
-// Trail is one hike, including the geometry used by the map placeholder.
+// Trail is one hike. Geometry is the centerline. Trailhead is its first point.
+// DistanceMiles is the geodesic length of Geometry.
 type Trail struct {
 	ID                uuid.UUID
 	Name              string
@@ -126,6 +133,7 @@ type Trail struct {
 	GradePercent      float64
 	Difficulty        Difficulty
 	Geometry          LineString
+	Trailhead         Point
 	Source            string
 	Confidence        float64
 	Sample            bool

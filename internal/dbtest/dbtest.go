@@ -56,7 +56,9 @@ func Schema(t *testing.T) (*pgx.Conn, string, string) {
 		t.Fatal(err)
 	}
 	query := parsed.Query()
-	query.Set("search_path", schema)
+	// public stays on the path so PostGIS, installed in public, resolves
+	// while tables live in the throwaway schema.
+	query.Set("search_path", schema+",public")
 	parsed.RawQuery = query.Encode()
 	return admin, schema, parsed.String()
 }
@@ -64,7 +66,8 @@ func Schema(t *testing.T) (*pgx.Conn, string, string) {
 // Pool migrates a fresh schema and returns a pool connected to it.
 func Pool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	return pool(t, "")
+	pool, _ := open(t, "", false)
+	return pool
 }
 
 // PoolInTimeZone is Pool with the session TimeZone set on every connection.
@@ -73,10 +76,18 @@ func PoolInTimeZone(t *testing.T, zone string) *pgxpool.Pool {
 	if zone == "" {
 		t.Fatal("time zone is required")
 	}
-	return pool(t, zone)
+	pool, _ := open(t, zone, false)
+	return pool
 }
 
-func pool(t *testing.T, zone string) *pgxpool.Pool {
+// PoolWithProvider is Pool plus the goose provider, so a test can migrate
+// down and back up. The provider's database stays open until the test ends.
+func PoolWithProvider(t *testing.T) (*pgxpool.Pool, *goose.Provider) {
+	t.Helper()
+	return open(t, "", true)
+}
+
+func open(t *testing.T, zone string, keepProvider bool) (*pgxpool.Pool, *goose.Provider) {
 	t.Helper()
 	_, _, databaseURL := Schema(t)
 	if zone != "" {
@@ -96,11 +107,16 @@ func pool(t *testing.T, zone string) *pgxpool.Pool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
+	closeDB := func() {
 		if err := db.Close(); err != nil {
 			t.Error(err)
 		}
-	}()
+	}
+	if keepProvider {
+		t.Cleanup(closeDB)
+	} else {
+		defer closeDB()
+	}
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
 	if err != nil {
 		t.Fatal(err)
@@ -114,5 +130,8 @@ func pool(t *testing.T, zone string) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	return pool
+	if !keepProvider {
+		return pool, nil
+	}
+	return pool, provider
 }

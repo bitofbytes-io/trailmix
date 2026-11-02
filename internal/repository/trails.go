@@ -12,7 +12,8 @@ import (
 
 const trailSelect = `
 SELECT t.id, t.name, t.distance_miles::float8, t.elevation_gain_feet, t.grade_percent::float8,
-       t.difficulty, t.geometry, t.source, t.confidence::float8, t.sample,
+       t.difficulty, ST_AsGeoJSON(t.geometry)::text, ST_X(t.trailhead), ST_Y(t.trailhead),
+       t.source, t.confidence::float8, t.sample,
        p.id, p.name, p.county,
        d.code, d.label
 FROM trails t
@@ -27,6 +28,7 @@ type scanner interface {
 func scanTrail(row scanner) (model.Trail, error) {
 	var trail model.Trail
 	var geometry []byte
+	var headLon, headLat float64
 	var dogCode string
 	var difficulty string
 	err := row.Scan(
@@ -37,6 +39,8 @@ func scanTrail(row scanner) (model.Trail, error) {
 		&trail.GradePercent,
 		&difficulty,
 		&geometry,
+		&headLon,
+		&headLat,
 		&trail.Source,
 		&trail.Confidence,
 		&trail.Sample,
@@ -54,6 +58,7 @@ func scanTrail(row scanner) (model.Trail, error) {
 	}
 	trail.Difficulty = model.Difficulty(difficulty)
 	trail.DogRule.Code = model.DogRuleCode(dogCode)
+	trail.Trailhead = model.Point{Lon: headLon, Lat: headLat}
 	if err := decodeGeometry(&trail, geometry); err != nil {
 		return model.Trail{}, err
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/a-h/templ"
@@ -49,11 +50,6 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	trails, err := h.trails.ListTrails(r.Context())
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
 
 	var selected *model.LogEntry
 	if raw := r.URL.Query().Get("entry"); raw != "" {
@@ -80,13 +76,8 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	if selected != nil {
 		selectedTrail = selected.Trail.ID
 	}
-	lines, err := mapLines(trails, selectedTrail)
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
 
-	view := pages.HomeView{Map: h.maps.Render(lines)}
+	view := pages.HomeView{Map: h.maps.Render(collectionURL(nil, selectedTrail))}
 	selectedID := uuid.Nil
 	if selected != nil {
 		selectedID = selected.ID
@@ -117,12 +108,11 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	} else {
 		shown = filter.Apply(catalog, query)
 	}
-	lines, err := mapLines(shown, uuid.Nil)
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
 	values := r.URL.Query()
+	mapValues := url.Values(nil)
+	if parseErr == nil {
+		mapValues = values
+	}
 	view := pages.SearchView{
 		QueryText:   values.Get("q"),
 		MaxDistance: values.Get("max_distance"),
@@ -135,7 +125,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		Trails:      presentTrails(shown),
 		Summary:     summary,
 		Error:       errText,
-		Map:         h.maps.Render(lines),
+		Map:         h.maps.Render(collectionURL(mapValues, uuid.Nil)),
 	}
 	status := http.StatusOK
 	if parseErr != nil {
@@ -287,11 +277,6 @@ func (h *Handler) renderTrail(w http.ResponseWriter, r *http.Request, id uuid.UU
 		h.fail(w, r, err)
 		return
 	}
-	lines, err := mapLines([]model.Trail{trail}, trail.ID)
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
 	visited := ncToday(h.now()).String()
 	notes := ""
 	duration := ""
@@ -309,7 +294,7 @@ func (h *Handler) renderTrail(w http.ResponseWriter, r *http.Request, id uuid.UU
 		Visited:       visited,
 		Notes:         notes,
 		Duration:      duration,
-		Map:           h.maps.Render(lines),
+		Map:           h.maps.Render(trailGeoJSONURL(trail.ID)),
 		Error:         message,
 	}
 	status := http.StatusOK
@@ -384,21 +369,4 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, status int, vie
 	if err := view.Render(r.Context(), w); err != nil {
 		slog.Error("render", "error", err, "path", r.URL.Path)
 	}
-}
-
-func mapLines(trails []model.Trail, selected uuid.UUID) ([]mapview.Line, error) {
-	lines := make([]mapview.Line, 0, len(trails))
-	for _, trail := range trails {
-		points, err := trail.Geometry.Points()
-		if err != nil {
-			return nil, err
-		}
-		lines = append(lines, mapview.Line{
-			ID:       trail.ID.String(),
-			Name:     trail.Name,
-			Points:   points,
-			Selected: trail.ID == selected && selected != uuid.Nil,
-		})
-	}
-	return lines, nil
 }

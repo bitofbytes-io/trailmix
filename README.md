@@ -1,12 +1,15 @@
 # Trail Mix
 
-Trail Mix is a small trail log for hikes around Cary, North Carolina. It is a server-rendered Go application with [templ](https://templ.guide/) pages and a PostgreSQL database. There is no Vercel deployment and no hosted map.
+Trail Mix is a small trail log for hikes around Cary, North Carolina. It is a server-rendered Go application with [templ](https://templ.guide/) pages and a PostGIS database. There is no Vercel deployment. Map tiles come from [OpenFreeMap](https://openfreemap.org/).
 
 The screen follows the wireframe: a random-trail button, a map area, the list of hikes you have logged, and the selected entry with its photo and notes. A separate page filters the catalog.
 
 ## What is real
 
 - Trail search filters by distance, difficulty, average grade, park, and dog rule (`allowed_leashed`, `allowed_offleash`, `prohibited`, `unknown`).
+- An interactive map. [MapLibre GL JS](https://maplibre.org/) draws the filtered trails on the OpenFreeMap Liberty style. Click a line for a popup that links to the trail. Logged trails are highlighted.
+- Trail lines stored as PostGIS `LineString` geometries (SRID 4326), with a trailhead point and a GiST index. Miles are the geodesic length of the line (`ST_Length` on geography). Grade is the stored elevation gain over that length.
+- `GET /api/trails.geojson` (the same filters as Find trails) and `GET /api/trails/{id}/geojson`.
 - A personal log stored in Postgres: visit date, duration, notes, and a photo.
 - A random-trail button that picks one trail from the catalog.
 - Goose migrations, including a dozen sample trails. Every sample trail has `sample = true` and `source = sample-fixture`.
@@ -14,9 +17,7 @@ The screen follows the wireframe: a random-trail button, a map area, the list of
 
 ## What is a placeholder
 
-- The map draws the stored GeoJSON on a blank panel. It does not call a tile provider. `mapview.Renderer` is the seam for a later provider.
-- Trail geometry is a GeoJSON `LineString` in a `jsonb` column. PostGIS is not installed.
-- Distances, elevation, grades, dog rules, and lines are sample fixtures, not a survey. Low-confidence rows say so on the trail page. The off-leash row exists so that filter has a fixture; it is not a verified off-leash trail.
+- Distances, elevation, grades, dog rules, and lines are sample fixtures, not a survey. The mile value is the length of the fixture line. Low-confidence rows say so on the trail page. The off-leash row exists so that filter has a fixture; it is not a verified off-leash trail.
 - "Random trail near me" draws from that Cary-area catalog. It does not read the device location.
 - There is no login. The app is a single-user local log. Do not publish it on the internet as-is.
 - Image push and production deploy are not wired. Run it locally with Docker Compose.
@@ -41,6 +42,10 @@ The database listens on `127.0.0.1:5432`. The local password is the default `tra
 | `PORT` | No | HTTP port. Defaults to `4600`. |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, or `error`. Defaults to `info`. |
 | `SECURE_COOKIES` | No | `false` for local HTTP. Defaults to `true`, which also sends HSTS. |
+| `MAP_STYLE_URL` | No | MapLibre style URL. Defaults to the OpenFreeMap Liberty style. |
+| `MAP_ATTRIBUTION` | No | Credit line shown on the map. Defaults to the OpenFreeMap / OpenStreetMap credit. |
+
+The database image is `postgis/postgis:17-3.6-alpine` (PostgreSQL 17 and PostGIS 3.6). A volume created by the older plain `postgres:17-alpine` image usually starts, because the major version matches. If it refuses to start, `docker compose down -v` drops that volume and the log entries in it.
 
 `DATABASE_URL_FILE` and `/run/secrets/trailmix_database_url` are also read, for the same file-secret pattern as the other apps. Do not commit a real URL.
 
@@ -53,7 +58,7 @@ Requirements:
 - Go 1.26.10 (the `go` directive in `go.mod`)
 - The [Tailwind CSS standalone CLI](https://github.com/tailwindlabs/tailwindcss/releases) v4.3.0 on your `PATH`, named `tailwindcss`
 - [Goose](https://github.com/pressly/goose) for `make migrate`
-- PostgreSQL 17
+- PostgreSQL 17 with PostGIS 3.6 (the Compose database image)
 
 Templ is run with `go run` from the module version. Generated `*_templ.go` files and `static/styles.css` are gitignored.
 
@@ -79,7 +84,22 @@ export TRAILMIX_TEST_DATABASE_URL='postgres://trailmix:trailmix@127.0.0.1:5432/t
 make test
 ```
 
-CI runs the same tests against PostgreSQL 17, then `gofmt` / golangci-lint, `go vet`, `govulncheck`, a race run, and `docker build`.
+CI runs the same tests against PostgreSQL 17 with PostGIS, then `gofmt` / golangci-lint, `go vet`, `govulncheck`, a race run, and `docker build`.
+
+## Map provider
+
+The style URL and the attribution line are defined once, as `DefaultMapStyleURL` and `DefaultMapAttribution` in `internal/config`. The environment variables above override them. MapLibre GL JS 6.16.0 is vendored in `static/vendor/maplibre/` under the 3-clause BSD license; the notice is in the file header.
+
+| | Default |
+| --- | --- |
+| `MAP_STYLE_URL` | `https://tiles.openfreemap.org/styles/liberty` |
+| `MAP_ATTRIBUTION` | `OpenFreeMap © OpenMapTiles Data from OpenStreetMap` |
+
+OpenFreeMap serves that style with no API key. The map data is © OpenStreetMap contributors, via OpenMapTiles. MapLibre also shows any attribution embedded in the style's TileJSON, so the default map credits OpenFreeMap, OpenMapTiles, and OpenStreetMap in the corner as well as in the caption.
+
+To point the map at another MapLibre style (a topo style, or another tile host), set `MAP_STYLE_URL` and `MAP_ATTRIBUTION` to that provider's style and required credit, then restart. No code change. Handlers only pass a GeoJSON URL into `mapview.Renderer`.
+
+A provider that is not a MapLibre style, such as the Google Maps JavaScript API, needs a new implementation of that interface. The GeoJSON endpoints stay the same.
 
 ## License
 

@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -29,11 +30,17 @@ func TestRouterHomeSearchAndRandom(t *testing.T) {
 	if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), "Random trail near me") || !strings.Contains(home.Body.String(), "No hikes logged yet") {
 		t.Fatalf("home = %d %s", home.Code, home.Body.String())
 	}
+	if !strings.Contains(home.Body.String(), "/api/trails.geojson") || !strings.Contains(home.Body.String(), "OpenStreetMap") {
+		t.Fatalf("home map = %s", home.Body.String())
+	}
 
 	filtered := get(t, router, "/trails?dog=prohibited")
 	body := filtered.Body.String()
 	if filtered.Code != http.StatusOK || !strings.Contains(body, "Hemlock Bluffs Loop") || strings.Contains(body, "Bond Park Lake Trail") {
 		t.Fatalf("filtered = %d %s", filtered.Code, body)
+	}
+	if !strings.Contains(body, "dog=prohibited") || !strings.Contains(body, config.DefaultMapStyleURL) {
+		t.Fatalf("filtered map did not keep the filter or the default style\n%s", body)
 	}
 
 	random := get(t, router, "/trails/random")
@@ -147,6 +154,7 @@ type pingOK struct{}
 func (pingOK) Ping(context.Context) error { return nil }
 
 func fakeTrail(name string, dog model.DogRuleCode, miles float64) model.Trail {
+	coordinates := [][]float64{{-78.8, 35.7}, {-78.7, 35.8}}
 	return model.Trail{
 		ID:            uuid.New(),
 		Name:          name,
@@ -160,9 +168,128 @@ func fakeTrail(name string, dog model.DogRuleCode, miles float64) model.Trail {
 		DogRule:       model.DogRule{Code: dog, Label: dog.Label()},
 		Geometry: model.LineString{
 			Type:        "LineString",
-			Coordinates: [][]float64{{-78.8, 35.7}, {-78.7, 35.8}},
+			Coordinates: coordinates,
 		},
+		Trailhead: model.Point{Lon: coordinates[0][0], Lat: coordinates[0][1]},
 	}
+}
+
+func TestTrailsGeoJSONFiltersLoggedAndDetail(t *testing.T) {
+	bond := fakeTrail("Bond Park Lake Trail", model.DogAllowedLeashed, 2.1)
+	hemlock := fakeTrail("Hemlock Bluffs Loop", model.DogProhibited, 1.3)
+	logs := &fakeLogs{entries: []model.LogEntry{{ID: uuid.New(), Trail: bond}}}
+	router := New(&config.Config{}, pingOK{}, &fakeTrails{trails: []model.Trail{bond, hemlock}}, logs, nil).Router()
+
+	all := decodeFeatures(t, get(t, router, "/api/trails.geojson"))
+	if all.Type != "FeatureCollection" || len(all.Features) != 2 {
+		t.Fatalf("all = %+v", all)
+	}
+	byName := map[string]geoFeature{}
+	for _, feature := range all.Features {
+		byName[feature.Properties.Name] = feature
+		if feature.Geometry.Type != "LineString" || len(feature.Geometry.Coordinates) < 2 {
+			t.Fatalf("geometry = %+v", feature.Geometry)
+		}
+		if feature.ID != feature.Properties.Href[len("/trails/"):] {
+			t.Fatalf("id %s href %s", feature.ID, feature.Properties.Href)
+		}
+		if feature.Properties.TrailheadLng != feature.Geometry.Coordinates[0][0] || feature.Properties.TrailheadLat != feature.Geometry.Coordinates[0][1] {
+			t.Fatalf("trailhead = %v,%v", feature.Properties.TrailheadLng, feature.Properties.TrailheadLat)
+		}
+	}
+	if byName[bond.Name].Properties.Logged != "yes" || byName[hemlock.Name].Properties.Logged != "no" {
+		t.Fatalf("logged flags = %+v %+v", byName[bond.Name].Properties, byName[hemlock.Name].Properties)
+	}
+	if byName[bond.Name].Properties.Distance != "2.1 mi" {
+		t.Fatalf("distance = %q", byName[bond.Name].Properties.Distance)
+	}
+
+	filtered := decodeFeatures(t, get(t, router, "/api/trails.geojson?dog=prohibited&max_distance=2"))
+	if len(filtered.Features) != 1 || filtered.Features[0].Properties.Name != hemlock.Name {
+		t.Fatalf("filtered = %+v", filtered.Features)
+	}
+
+	selected := decodeFeatures(t, get(t, router, "/api/trails.geojson?selected="+bond.ID.String()))
+	for _, feature := range selected.Features {
+		want := "no"
+		if feature.ID == bond.ID.String() {
+			want = "yes"
+		}
+		if feature.Properties.Selected != want {
+			t.Fatalf("selected %s = %v", feature.Properties.Name, feature.Properties.Selected)
+		}
+	}
+
+	empty := decodeFeatures(t, get(t, router, "/api/trails.geojson?q=zzzz"))
+	if len(empty.Features) != 0 {
+		t.Fatalf("empty search = %+v", empty.Features)
+	}
+
+	one := decodeFeatures(t, get(t, router, "/api/trails/"+hemlock.ID.String()+"/geojson"))
+	if len(one.Features) != 1 || one.Features[0].Properties.Selected != "yes" || one.Features[0].Properties.Logged != "no" {
+		t.Fatalf("detail = %+v", one.Features)
+	}
+	if one.Features[0].Properties.Href != "/trails/"+hemlock.ID.String() {
+		t.Fatalf("href = %s", one.Features[0].Properties.Href)
+	}
+
+	missing := get(t, router, "/api/trails/"+uuid.NewString()+"/geojson")
+	if missing.Code != http.StatusNotFound || !strings.Contains(missing.Header().Get("Content-Type"), "application/json") {
+		t.Fatalf("missing = %d %s", missing.Code, missing.Header().Get("Content-Type"))
+	}
+	badID := get(t, router, "/api/trails/not-a-uuid/geojson")
+	if badID.Code != http.StatusBadRequest {
+		t.Fatalf("bad id = %d", badID.Code)
+	}
+	badFilter := get(t, router, "/api/trails.geojson?max_distance=nope")
+	if badFilter.Code != http.StatusBadRequest || !strings.Contains(badFilter.Body.String(), "Distance") {
+		t.Fatalf("bad filter = %d %s", badFilter.Code, badFilter.Body.String())
+	}
+
+	entryID := logs.entries[0].ID
+	home := get(t, router, "/?entry="+entryID.String())
+	if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), "selected="+bond.ID.String()) {
+		t.Fatalf("home selected map missing\n%s", home.Body.String())
+	}
+	detail := get(t, router, "/trails/"+bond.ID.String())
+	if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), "/api/trails/"+bond.ID.String()+"/geojson") {
+		t.Fatalf("detail map url missing\n%s", detail.Body.String())
+	}
+}
+
+type geoFeature struct {
+	Type       string           `json:"type"`
+	ID         string           `json:"id"`
+	Geometry   model.LineString `json:"geometry"`
+	Properties struct {
+		Name         string  `json:"name"`
+		Href         string  `json:"href"`
+		Distance     string  `json:"distance"`
+		Logged       string  `json:"logged"`
+		Selected     string  `json:"selected"`
+		TrailheadLng float64 `json:"trailhead_lng"`
+		TrailheadLat float64 `json:"trailhead_lat"`
+	} `json:"properties"`
+}
+
+type geoCollection struct {
+	Type     string       `json:"type"`
+	Features []geoFeature `json:"features"`
+}
+
+func decodeFeatures(t *testing.T, rec *httptest.ResponseRecorder) geoCollection {
+	t.Helper()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Header().Get("Content-Type"), "application/geo+json") {
+		t.Fatalf("content type = %s", rec.Header().Get("Content-Type"))
+	}
+	var collection geoCollection
+	if err := json.Unmarshal(rec.Body.Bytes(), &collection); err != nil {
+		t.Fatal(err)
+	}
+	return collection
 }
 
 type fakeTrails struct {

@@ -66,7 +66,13 @@ func run() error {
 	}
 	slog.Info("connected to database")
 
-	assetsVersion, err := assets.Version(filepath.Join("static", "styles.css"))
+	assetsVersion, err := assets.Version(
+		filepath.Join("static", "styles.css"),
+		filepath.Join("static", "map.js"),
+		filepath.Join("static", "vendor", "maplibre", "maplibre-gl.css"),
+		filepath.Join("static", "vendor", "maplibre", "maplibre-gl.mjs"),
+		filepath.Join("static", "vendor", "maplibre", "maplibre-gl-worker.mjs"),
+	)
 	if err != nil {
 		slog.Warn("asset version unavailable", "error", err)
 	} else {
