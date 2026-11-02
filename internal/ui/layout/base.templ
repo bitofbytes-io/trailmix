@@ -1,0 +1,49 @@
+package layout
+
+templ Base(title string, current string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<meta name="theme-color" content="#1d4a38"/>
+			<title>{ title } | Trail Mix</title>
+			<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+			<link rel="manifest" href="/site.webmanifest"/>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+			<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,680&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
+			<link rel="stylesheet" href={ AssetURL("/static/styles.css") }/>
+		</head>
+		<body>
+			<a class="skip" href="#content">Skip to content</a>
+			@Header(current)
+			<p class="sample-banner">Sample data. Distances, grades, dog rules, and map lines are fixtures for local development, not a survey.</p>
+			{ children... }
+		</body>
+	</html>
+}
+
+templ Header(current string) {
+	<header class="topbar">
+		<div class="topbar-inner">
+			if current == "home" {
+				<h1 class="wordmark"><a href="/">Trail Mix</a></h1>
+			} else {
+				<p class="wordmark"><a href="/">Trail Mix</a></p>
+			}
+			<nav aria-label="Primary">
+				if current == "trails" {
+					<a href="/trails" aria-current="page">Find trails</a>
+				} else {
+					<a href="/trails">Find trails</a>
+				}
+				if current == "home" || current == "log" {
+					<a href="/" aria-current="page">My log</a>
+				} else {
+					<a href="/">My log</a>
+				}
+			</nav>
+		</div>
+	</header>
+}

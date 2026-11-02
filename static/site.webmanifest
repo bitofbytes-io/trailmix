@@ -1,0 +1,14 @@
+{
+  "name": "Trail Mix",
+  "short_name": "Trail Mix",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "theme_color": "#1d4a38",
+  "background_color": "#f4efe6",
+  "display": "standalone"
+}

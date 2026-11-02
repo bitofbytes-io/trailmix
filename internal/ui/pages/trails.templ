@@ -1,0 +1,140 @@
+package pages
+
+import "github.com/bitofbytes-io/trailmix/internal/ui/layout"
+
+templ SearchPage(v SearchView) {
+	@layout.Base("Find trails", "trails") {
+		<main id="content" class="wrap">
+			<h1>Find a trail</h1>
+			<p class="lede">Filter the sample catalog by distance, difficulty, grade, park, and dog rules. <a href="/trails/random">Random trail near me</a></p>
+			if v.Error != "" {
+				<p class="alert" role="alert">{ v.Error }</p>
+			}
+			<form class="filters" method="get" action="/trails">
+				<div>
+					<label for="q">Name</label>
+					<input id="q" name="q" type="search" value={ v.QueryText }/>
+				</div>
+				<div>
+					<label for="max_distance">Distance</label>
+					<select id="max_distance" name="max_distance">
+						<option value="" selected?={ v.MaxDistance == "" }>Any distance</option>
+						<option value="2" selected?={ v.MaxDistance == "2" }>Up to 2 mi</option>
+						<option value="3" selected?={ v.MaxDistance == "3" }>Up to 3 mi</option>
+						<option value="6" selected?={ v.MaxDistance == "6" }>Up to 6 mi</option>
+					</select>
+				</div>
+				<div>
+					<label for="difficulty">Difficulty</label>
+					<select id="difficulty" name="difficulty">
+						<option value="" selected?={ v.Difficulty == "" }>Any difficulty</option>
+						<option value="easy" selected?={ v.Difficulty == "easy" }>Easy</option>
+						<option value="moderate" selected?={ v.Difficulty == "moderate" }>Moderate</option>
+						<option value="hard" selected?={ v.Difficulty == "hard" }>Hard</option>
+					</select>
+				</div>
+				<div>
+					<label for="max_grade">Grade</label>
+					<select id="max_grade" name="max_grade">
+						<option value="" selected?={ v.MaxGrade == "" }>Any grade</option>
+						<option value="1" selected?={ v.MaxGrade == "1" }>Up to 1%</option>
+						<option value="2" selected?={ v.MaxGrade == "2" }>Up to 2%</option>
+						<option value="4" selected?={ v.MaxGrade == "4" }>Up to 4%</option>
+					</select>
+				</div>
+				<div>
+					<label for="park">Park</label>
+					<select id="park" name="park">
+						<option value="" selected?={ v.ParkID == "" }>Any park</option>
+						for _, park := range v.Parks {
+							<option value={ park.ID } selected?={ v.ParkID == park.ID }>{ park.Name }</option>
+						}
+					</select>
+				</div>
+				<div>
+					<label for="dog">Dogs</label>
+					<select id="dog" name="dog">
+						<option value="" selected?={ v.Dog == "" }>Any dog rule</option>
+						for _, rule := range v.DogRules {
+							<option value={ rule.Code } selected?={ v.Dog == rule.Code }>{ rule.Label }</option>
+						}
+					</select>
+				</div>
+				<div class="filters-submit">
+					<button class="button" type="submit">Show trails</button>
+				</div>
+			</form>
+			@v.Map
+			<p class="meta">{ v.Summary }</p>
+			if len(v.Trails) == 0 {
+				<p class="empty">No trails match.</p>
+			}
+			<ul class="stack">
+				for _, trail := range v.Trails {
+					<li>
+						<a class="card" href={ templ.URL(trail.Href) }>
+							<p><strong>{ trail.Name }</strong> · { trail.Distance } · { trail.Difficulty }</p>
+							<p class="meta">{ trail.Park } · { trail.Dog } · grade { trail.Grade }</p>
+						</a>
+					</li>
+				}
+			</ul>
+		</main>
+	}
+}
+
+templ TrailPage(v TrailView) {
+	@layout.Base(v.Name, "trails") {
+		<main id="content" class="wrap">
+			<p class="meta"><a href="/trails">Find trails</a></p>
+			<h1>{ v.Name }</h1>
+			if v.Sample {
+				<p class="badge">Sample trail</p>
+			}
+			<p class="lede">{ v.Park } · { v.County }</p>
+			<dl class="facts">
+				<div><dt>Distance</dt><dd>{ v.Distance }</dd></div>
+				<div><dt>Difficulty</dt><dd>{ v.Difficulty }</dd></div>
+				<div><dt>Grade</dt><dd>{ v.Grade }</dd></div>
+				<div><dt>Elevation gain</dt><dd>{ v.Elevation }</dd></div>
+				<div><dt>Dogs</dt><dd>{ v.Dog }</dd></div>
+				<div><dt>Source</dt><dd>{ v.Source }</dd></div>
+				<div><dt>Confidence</dt><dd>{ v.Confidence }</dd></div>
+			</dl>
+			if v.LowConfidence {
+				<p class="alert">This record is a low-confidence fixture. Treat the dog rule and the line as unconfirmed.</p>
+			}
+			@v.Map
+			<section class="card">
+				<h2>Log this trail</h2>
+				if v.Error != "" {
+					<p class="alert" role="alert">{ v.Error }</p>
+				}
+				<form method="post" action={ templ.URL("/trails/" + v.ID + "/log") } enctype="multipart/form-data">
+					@entryFields(v.Visited, v.Notes, v.Duration)
+					<button class="button" type="submit">Add to my log</button>
+				</form>
+			</section>
+		</main>
+	}
+}
+
+templ entryFields(visited string, notes string, duration string) {
+	<div class="field">
+		<label for="visited_on">Date</label>
+		<input id="visited_on" name="visited_on" type="date" required value={ visited }/>
+	</div>
+	<div class="field">
+		<label for="duration_minutes">Minutes</label>
+		<input id="duration_minutes" name="duration_minutes" type="number" min="0" max="1440" inputmode="numeric" value={ duration }/>
+	</div>
+	<div class="field">
+		<label for="notes">Notes</label>
+		<textarea id="notes" name="notes" rows="4">{ notes }</textarea>
+	</div>
+	<div class="field">
+		<label for="photo">Photo</label>
+		<input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif"/>
+		<p class="meta">JPEG, PNG, WEBP, or GIF. Up to 2 MB.</p>
+	</div>
+}

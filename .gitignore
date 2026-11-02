@@ -1,0 +1,48 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of go coverage tool
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local environment config
+local.mk
+trailmix.env
+.env
+.env.*
+.worktree.json
+.worktrees
+
+# Generated CSS (rebuild from tailwind/)
+static/styles.css
+
+# Generated templ files
+*_templ.go
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local browser snapshots
+.playwright-mcp/

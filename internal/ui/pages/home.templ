@@ -1,0 +1,74 @@
+package pages
+
+import "github.com/bitofbytes-io/trailmix/internal/ui/layout"
+
+templ HomePage(v HomeView) {
+	@layout.Base("Your log", "home") {
+		<main id="content" class="wrap">
+			<div class="hero">
+				<a class="button" href="/trails/random">Random trail near me</a>
+			</div>
+			@v.Map
+			<div class="split">
+				<section aria-label="Trails you have done">
+					<h2>Logged</h2>
+					if len(v.Entries) == 0 {
+						<p class="empty">No hikes logged yet.</p>
+					} else {
+						<ul class="stack">
+							for _, entry := range v.Entries {
+								<li>
+									if entry.Selected {
+										<a class="card card-selected" href={ templ.URL(entry.Href) } aria-current="true">
+											@logLine(entry)
+										</a>
+									} else {
+										<a class="card" href={ templ.URL(entry.Href) }>
+											@logLine(entry)
+										</a>
+									}
+								</li>
+							}
+						</ul>
+					}
+				</section>
+				<section aria-label="Selected hike">
+					if v.HasSelected {
+						<article class="card">
+							<h2>
+								{ v.Selected.TrailName } · { v.Selected.Distance }
+								if v.Selected.Duration != "" {
+									<span> · { v.Selected.Duration }</span>
+								}
+							</h2>
+							<p class="meta">{ v.Selected.Dog } · { v.Selected.Visited }</p>
+							if v.Selected.HasPhoto {
+								<img class="photo" src={ v.Selected.PhotoURL } alt={ v.Selected.TrailName + " photo" }/>
+							} else {
+								<div class="photo-placeholder">Photo</div>
+							}
+							<p class="meta">Notes</p>
+							if v.Selected.Notes == "" {
+								<div class="notes">No notes yet.</div>
+							} else {
+								<div class="notes">{ v.Selected.Notes }</div>
+							}
+							<p class="actions"><a href={ templ.URL(v.Selected.EditHref) }>Edit entry</a></p>
+						</article>
+					} else {
+						<article class="card">
+							<h2>No hike selected</h2>
+							<p>Log a trail you have walked, or draw a random one from the sample catalog.</p>
+							<p class="actions"><a class="button" href="/trails">Find a trail</a></p>
+						</article>
+					}
+				</section>
+			</div>
+		</main>
+	}
+}
+
+templ logLine(entry LogItem) {
+	<p><strong>{ entry.TrailName }</strong> · { entry.Distance } · { entry.Dog }</p>
+	<p class="meta">{ entry.Visited }</p>
+}

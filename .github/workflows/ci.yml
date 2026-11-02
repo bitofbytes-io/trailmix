@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: trailmix
+          POSTGRES_PASSWORD: trailmix-test-only
+          POSTGRES_DB: trailmix
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U trailmix -d trailmix"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TRAILMIX_TEST_DATABASE_URL: postgres://trailmix:trailmix-test-only@localhost:5432/trailmix?sslmode=disable
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+      - name: Install Tailwind CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.0/tailwindcss-linux-x64 -o /tmp/tailwindcss
+          echo "73f0e5459054e5cfaa8ab6f3b940f3fbe0f13cc7fd83bc24e7c655033c203400  /tmp/tailwindcss" | sha256sum --check --strict
+          chmod +x /tmp/tailwindcss
+          sudo mv /tmp/tailwindcss /usr/local/bin/tailwindcss
+      - run: make test build
+      # make test build generates the untracked Templ and CSS assets lint needs.
+      - name: Lint Go
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+      - run: go vet ./...
+      - name: Check Go vulnerabilities
+        # Install, then run it with the go.mod toolchain so standard-library findings match
+        # the version we ship.
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          "$(go env GOPATH)/bin/govulncheck" ./...
+      - run: go test -race ./internal/... ./cmd/...
+
+  image:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Build the local image
+        run: docker build -t trailmix:ci .
