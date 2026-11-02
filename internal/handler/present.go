@@ -2,7 +2,6 @@ package handler
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/bitofbytes-io/trailmix/internal/format"
 	"github.com/bitofbytes-io/trailmix/internal/model"
@@ -81,10 +80,6 @@ func dogLabel(rule model.DogRule) string {
 
 func confidence(score float64) string {
 	return format.Confidence(score)
-}
-
-func formatISO(day time.Time) string {
-	return format.ISODate(day)
 }
 
 func durationInput(minutes *int) string {

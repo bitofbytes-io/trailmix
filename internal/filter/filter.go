@@ -4,6 +4,7 @@ package filter
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"strconv"
@@ -39,7 +40,7 @@ func Parse(values url.Values) (Query, error) {
 
 	if raw := strings.TrimSpace(values.Get("max_distance")); raw != "" {
 		miles, err := strconv.ParseFloat(raw, 64)
-		if err != nil || miles < 0 {
+		if err != nil || math.IsNaN(miles) || math.IsInf(miles, 0) || miles < 0 {
 			return Query{}, InvalidQueryError{Message: "Distance must be a number of miles, zero or more."}
 		}
 		query.MaxDistanceMiles = &miles
@@ -55,7 +56,7 @@ func Parse(values url.Values) (Query, error) {
 
 	if raw := strings.TrimSpace(values.Get("max_grade")); raw != "" {
 		grade, err := strconv.ParseFloat(raw, 64)
-		if err != nil || grade < 0 {
+		if err != nil || math.IsNaN(grade) || math.IsInf(grade, 0) || grade < 0 {
 			return Query{}, InvalidQueryError{Message: "Grade must be a percent, zero or more."}
 		}
 		query.MaxGradePercent = &grade

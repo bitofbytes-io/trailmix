@@ -64,7 +64,31 @@ func Schema(t *testing.T) (*pgx.Conn, string, string) {
 // Pool migrates a fresh schema and returns a pool connected to it.
 func Pool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	return pool(t, "")
+}
+
+// PoolInTimeZone is Pool with the session TimeZone set on every connection.
+func PoolInTimeZone(t *testing.T, zone string) *pgxpool.Pool {
+	t.Helper()
+	if zone == "" {
+		t.Fatal("time zone is required")
+	}
+	return pool(t, zone)
+}
+
+func pool(t *testing.T, zone string) *pgxpool.Pool {
+	t.Helper()
 	_, _, databaseURL := Schema(t)
+	if zone != "" {
+		parsed, err := url.Parse(databaseURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		query := parsed.Query()
+		query.Set("TimeZone", zone)
+		parsed.RawQuery = query.Encode()
+		databaseURL = parsed.String()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 

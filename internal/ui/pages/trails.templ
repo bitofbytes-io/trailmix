@@ -111,7 +111,7 @@ templ TrailPage(v TrailView) {
 					<p class="alert" role="alert">{ v.Error }</p>
 				}
 				<form method="post" action={ templ.URL("/trails/" + v.ID + "/log") } enctype="multipart/form-data">
-					@entryFields(v.Today, "", "")
+					@entryFields(v.Visited, v.Notes, v.Duration)
 					<button class="button" type="submit">Add to my log</button>
 				</form>
 			</section>

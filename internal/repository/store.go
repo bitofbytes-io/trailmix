@@ -5,7 +5,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/bitofbytes-io/trailmix/internal/model"
 	"github.com/google/uuid"
@@ -26,7 +25,7 @@ type Photo struct {
 // current image.
 type EntryInput struct {
 	TrailID         uuid.UUID
-	VisitedOn       time.Time
+	VisitedOn       model.Date
 	Notes           string
 	DurationMinutes *int
 	Photo           *Photo

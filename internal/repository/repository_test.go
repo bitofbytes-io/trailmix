@@ -80,7 +80,7 @@ func TestLogEntryPhotoRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	visited := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
+	visited := model.Date{Year: 2026, Month: time.October, Day: 20}
 	minutes := 45
 	id, err := logs.CreateEntry(ctx, EntryInput{
 		TrailID:         trails[0].ID,
@@ -149,9 +149,65 @@ func TestMissingTrailAndEntry(t *testing.T) {
 	}
 	if _, err := NewLogRepository(pool).CreateEntry(ctx, EntryInput{
 		TrailID:   uuid.New(),
-		VisitedOn: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
+		VisitedOn: model.Date{Year: 2026, Month: time.January, Day: 2},
 	}); err != ErrNotFound {
 		t.Fatalf("missing trail create = %v", err)
+	}
+}
+
+func TestVisitDateSurvivesNonUTCSession(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.PoolInTimeZone(t, "America/Los_Angeles")
+	var zone string
+	if err := pool.QueryRow(ctx, "SHOW timezone").Scan(&zone); err != nil {
+		t.Fatal(err)
+	}
+	if zone != "America/Los_Angeles" {
+		t.Fatalf("session timezone = %q", zone)
+	}
+
+	trails, err := NewTrailRepository(pool).ListTrails(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logs := NewLogRepository(pool)
+	day := model.Date{Year: 2026, Month: time.November, Day: 2}
+	id, err := logs.CreateEntry(ctx, EntryInput{TrailID: trails[0].ID, VisitedOn: day, Notes: "west of UTC"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stored string
+	if err := pool.QueryRow(ctx, "SELECT visited_on::text FROM log_entries WHERE id = $1", id).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != "2026-11-02" {
+		t.Fatalf("stored date = %s, want 2026-11-02", stored)
+	}
+	entry, err := logs.GetEntry(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.VisitedOn != day {
+		t.Fatalf("read date = %s", entry.VisitedOn)
+	}
+
+	updated := model.Date{Year: 2026, Month: time.January, Day: 31}
+	if err := logs.UpdateEntry(ctx, id, EntryInput{VisitedOn: updated, Notes: "still January"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT visited_on::text FROM log_entries WHERE id = $1", id).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != "2026-01-31" {
+		t.Fatalf("updated date = %s", stored)
+	}
+	listed, err := logs.ListEntries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].VisitedOn != updated {
+		t.Fatalf("listed date = %+v", listed)
 	}
 }
 

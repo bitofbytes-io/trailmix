@@ -78,7 +78,9 @@ type TrailView struct {
 	Confidence    string
 	LowConfidence bool
 	Sample        bool
-	Today         string
+	Visited       string
+	Notes         string
+	Duration      string
 	Map           templ.Component
 	Error         string
 }
@@ -86,5 +88,6 @@ type TrailView struct {
 // EntryView is the editable log entry.
 type EntryView struct {
 	LogItem
-	Error string
+	Error       string
+	RemovePhoto bool
 }

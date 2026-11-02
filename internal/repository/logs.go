@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/bitofbytes-io/trailmix/internal/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const logSelect = `
@@ -26,12 +28,13 @@ JOIN dog_rules d ON d.code = t.dog_rule
 
 func scanEntry(row scanner) (model.LogEntry, error) {
 	var entry model.LogEntry
+	var visited pgtype.Date
 	var duration *int32
 	var geometry []byte
 	var dogCode, difficulty string
 	err := row.Scan(
 		&entry.ID,
-		&entry.VisitedOn,
+		&visited,
 		&entry.Notes,
 		&duration,
 		&entry.HasPhoto,
@@ -63,6 +66,11 @@ func scanEntry(row scanner) (model.LogEntry, error) {
 		minutes := int(*duration)
 		entry.DurationMinutes = &minutes
 	}
+	day, err := civilDate(visited)
+	if err != nil {
+		return model.LogEntry{}, err
+	}
+	entry.VisitedOn = day
 	entry.Trail.Difficulty = model.Difficulty(difficulty)
 	entry.Trail.DogRule.Code = model.DogRuleCode(dogCode)
 	if err := decodeGeometry(&entry.Trail, geometry); err != nil {
@@ -122,12 +130,16 @@ func (r *LogRepository) CreateEntry(ctx context.Context, in EntryInput) (uuid.UU
 		contentType = &in.Photo.ContentType
 		data = in.Photo.Data
 	}
+	visited, err := pgDate(in.VisitedOn)
+	if err != nil {
+		return uuid.Nil, err
+	}
 	var id uuid.UUID
-	err := r.pool.QueryRow(ctx, `
+	err = r.pool.QueryRow(ctx, `
 		INSERT INTO log_entries (trail_id, visited_on, notes, duration_minutes, photo, photo_content_type)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id`,
-		in.TrailID, in.VisitedOn, in.Notes, in.DurationMinutes, data, contentType,
+		in.TrailID, visited, in.Notes, in.DurationMinutes, data, contentType,
 	).Scan(&id)
 	if err != nil {
 		if isForeignKey(err) {
@@ -156,6 +168,10 @@ func (r *LogRepository) UpdateEntry(ctx context.Context, id uuid.UUID, in EntryI
 		contentType = &in.Photo.ContentType
 		data = in.Photo.Data
 	}
+	visited, err := pgDate(in.VisitedOn)
+	if err != nil {
+		return err
+	}
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE log_entries
 		SET visited_on = $2,
@@ -172,7 +188,7 @@ func (r *LogRepository) UpdateEntry(ctx context.Context, id uuid.UUID, in EntryI
 		        ELSE photo_content_type
 		    END
 		WHERE id = $1`,
-		id, in.VisitedOn, in.Notes, in.DurationMinutes, mode, data, contentType,
+		id, visited, in.Notes, in.DurationMinutes, mode, data, contentType,
 	)
 	if err != nil {
 		return fmt.Errorf("update entry: %w", err)
@@ -211,6 +227,27 @@ func (r *LogRepository) EntryPhoto(ctx context.Context, id uuid.UUID) (string, [
 		return "", nil, ErrNotFound
 	}
 	return *contentType, data, nil
+}
+
+// pgDate binds a calendar day as a Postgres date. A time.Time is sent as
+// timestamptz, and a DATE cast of that value follows the session TimeZone,
+// which can move the day.
+func pgDate(day model.Date) (pgtype.Date, error) {
+	if day.IsZero() {
+		return pgtype.Date{}, fmt.Errorf("visit date is required")
+	}
+	return pgtype.Date{
+		Time:  time.Date(day.Year, day.Month, day.Day, 0, 0, 0, 0, time.UTC),
+		Valid: true,
+	}, nil
+}
+
+func civilDate(day pgtype.Date) (model.Date, error) {
+	if !day.Valid || day.InfinityModifier != pgtype.Finite {
+		return model.Date{}, fmt.Errorf("visit date is missing")
+	}
+	instant := day.Time.UTC()
+	return model.Date{Year: instant.Year(), Month: instant.Month(), Day: instant.Day()}, nil
 }
 
 func isForeignKey(err error) bool {

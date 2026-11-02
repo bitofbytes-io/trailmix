@@ -112,6 +112,14 @@ func TestParseRejectsBadValuesAndAcceptsEmpty(t *testing.T) {
 	if _, err := Parse(url.Values{"park": {"bond"}}); err == nil {
 		t.Fatal("expected park error")
 	}
+	for _, raw := range []string{"NaN", "nan", "Inf", "+Inf", "-Inf", "Infinity", "+Infinity"} {
+		if _, err := Parse(url.Values{"max_distance": {raw}}); err == nil {
+			t.Fatalf("accepted non-finite distance %q", raw)
+		}
+		if _, err := Parse(url.Values{"max_grade": {raw}}); err == nil {
+			t.Fatalf("accepted non-finite grade %q", raw)
+		}
+	}
 	query, err := Parse(url.Values{})
 	if err != nil {
 		t.Fatal(err)

@@ -18,7 +18,7 @@ templ EntryPage(v EntryView) {
 			}
 			<form method="post" action={ templ.URL("/log/" + v.ID) } enctype="multipart/form-data">
 				@entryFields(v.VisitedISO, v.Notes, v.DurationInput)
-				@removePhoto(v.HasPhoto)
+				@removePhoto(v.HasPhoto, v.RemovePhoto)
 				<button class="button" type="submit">Save entry</button>
 			</form>
 			<form class="danger-form" method="post" action={ templ.URL("/log/" + v.ID + "/delete") }>
@@ -28,11 +28,11 @@ templ EntryPage(v EntryView) {
 	}
 }
 
-templ removePhoto(hasPhoto bool) {
+templ removePhoto(hasPhoto bool, checked bool) {
 	if hasPhoto {
 		<div class="field">
 			<label class="check" for="remove_photo">
-				<input id="remove_photo" name="remove_photo" type="checkbox" value="1"/>
+				<input id="remove_photo" name="remove_photo" type="checkbox" value="1" checked?={ checked }/>
 				Remove the current photo
 			</label>
 		</div>

@@ -61,7 +61,7 @@ func TestParseEntryFormAcceptsToday(t *testing.T) {
 	if input.Notes != "Shady, muddy near the lake." || input.DurationMinutes == nil || *input.DurationMinutes != 45 {
 		t.Fatalf("input = %+v", input)
 	}
-	if input.VisitedOn.Format("2006-01-02") != "2026-11-02" {
+	if input.VisitedOn.String() != "2026-11-02" {
 		t.Fatalf("visited = %s", input.VisitedOn)
 	}
 }

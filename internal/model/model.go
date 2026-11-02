@@ -135,7 +135,7 @@ type Trail struct {
 type LogEntry struct {
 	ID              uuid.UUID
 	Trail           Trail
-	VisitedOn       time.Time
+	VisitedOn       Date
 	Notes           string
 	DurationMinutes *int
 	HasPhoto        bool

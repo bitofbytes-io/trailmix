@@ -10,12 +10,22 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/bitofbytes-io/trailmix/internal/model"
 	"github.com/bitofbytes-io/trailmix/internal/repository"
 )
+
+type entryDraft struct {
+	Present     bool
+	VisitedOn   string
+	Notes       string
+	Duration    string
+	RemovePhoto bool
+}
 
 type formError struct {
 	status  int
 	message string
+	draft   entryDraft
 }
 
 func (e formError) Error() string {
@@ -32,30 +42,45 @@ func (h *Handler) parseEntryForm(w http.ResponseWriter, r *http.Request, updatin
 		return repository.EntryInput{}, formError{status: http.StatusBadRequest, message: "The form could not be read."}
 	}
 
-	visited, err := time.Parse("2006-01-02", strings.TrimSpace(r.FormValue("visited_on")))
-	if err != nil {
-		return repository.EntryInput{}, formError{status: http.StatusBadRequest, message: "Choose a visit date."}
+	draft := entryDraft{
+		Present:     true,
+		VisitedOn:   strings.TrimSpace(r.FormValue("visited_on")),
+		Notes:       strings.TrimSpace(r.FormValue("notes")),
+		Duration:    strings.TrimSpace(r.FormValue("duration_minutes")),
+		RemovePhoto: r.FormValue("remove_photo") == "1",
 	}
-	if visited.After(ncToday(h.now())) {
-		return repository.EntryInput{}, formError{status: http.StatusBadRequest, message: "Visit date can't be in the future."}
+	reject := func(status int, message string) error {
+		return formError{status: status, message: message, draft: draft}
 	}
 
-	notes := strings.TrimSpace(r.FormValue("notes"))
-	if utf8.RuneCountInString(notes) > maxNotesRunes {
-		return repository.EntryInput{}, formError{status: http.StatusBadRequest, message: "Notes need to be 4,000 characters or fewer."}
+	visited, err := model.ParseDate(draft.VisitedOn)
+	if err != nil {
+		return repository.EntryInput{}, reject(http.StatusBadRequest, "Choose a visit date.")
+	}
+	if visited.After(ncToday(h.now())) {
+		return repository.EntryInput{}, reject(http.StatusBadRequest, "Visit date can't be in the future.")
+	}
+
+	if utf8.RuneCountInString(draft.Notes) > maxNotesRunes {
+		return repository.EntryInput{}, reject(http.StatusBadRequest, "Notes need to be 4,000 characters or fewer.")
 	}
 
 	var duration *int
-	if raw := strings.TrimSpace(r.FormValue("duration_minutes")); raw != "" {
-		minutes, err := strconv.Atoi(raw)
+	if draft.Duration != "" {
+		minutes, err := strconv.Atoi(draft.Duration)
 		if err != nil || minutes < 0 || minutes > 1440 {
-			return repository.EntryInput{}, formError{status: http.StatusBadRequest, message: "Duration must be a whole number of minutes, up to 24 hours."}
+			return repository.EntryInput{}, reject(http.StatusBadRequest, "Duration must be a whole number of minutes, up to 24 hours.")
 		}
 		duration = &minutes
 	}
 
 	photo, err := readPhoto(r)
 	if err != nil {
+		var formErr formError
+		if errors.As(err, &formErr) {
+			formErr.draft = draft
+			return repository.EntryInput{}, formErr
+		}
 		return repository.EntryInput{}, err
 	}
 	if photo == nil && updating && r.FormValue("remove_photo") == "1" {
@@ -64,7 +89,7 @@ func (h *Handler) parseEntryForm(w http.ResponseWriter, r *http.Request, updatin
 
 	return repository.EntryInput{
 		VisitedOn:       visited,
-		Notes:           notes,
+		Notes:           draft.Notes,
 		DurationMinutes: duration,
 		Photo:           photo,
 	}, nil
@@ -102,11 +127,11 @@ func readPhoto(r *http.Request) (*repository.Photo, error) {
 	return &repository.Photo{ContentType: contentType, Data: data}, nil
 }
 
-func ncToday(now time.Time) time.Time {
+func ncToday(now time.Time) model.Date {
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		loc = time.FixedZone("EST", -5*60*60)
 	}
 	local := now.In(loc)
-	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
+	return model.Date{Year: local.Year(), Month: local.Month(), Day: local.Day()}
 }

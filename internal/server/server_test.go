@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bitofbytes-io/trailmix/internal/config"
 	"github.com/bitofbytes-io/trailmix/internal/model"
@@ -53,6 +56,82 @@ func TestRouterHomeSearchAndRandom(t *testing.T) {
 	if health.Code != http.StatusOK || health.Body.String() != "ok" {
 		t.Fatalf("health = %d %q", health.Code, health.Body.String())
 	}
+}
+
+func TestRejectedFormsKeepTheDraft(t *testing.T) {
+	trail := fakeTrail("Hemlock Bluffs Loop", model.DogProhibited, 1.3)
+	store := &fakeTrails{trails: []model.Trail{trail}}
+	logs := &fakeLogs{}
+	router := New(&config.Config{}, pingOK{}, store, logs, nil).Router()
+
+	created := postForm(t, router, "/trails/"+trail.ID.String()+"/log", map[string]string{
+		"visited_on":       "2099-01-01",
+		"notes":            "muddy creek",
+		"duration_minutes": "40",
+	})
+	if created.Code != http.StatusBadRequest {
+		t.Fatalf("create status = %d", created.Code)
+	}
+	body := created.Body.String()
+	for _, want := range []string{"muddy creek", "2099-01-01", "future", `value="40"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("create response missing %q\n%s", want, body)
+		}
+	}
+	if len(logs.entries) != 0 {
+		t.Fatal("rejected create was stored")
+	}
+
+	saved := model.LogEntry{
+		ID:        uuid.New(),
+		Trail:     trail,
+		VisitedOn: model.Date{Year: 2026, Month: time.October, Day: 1},
+		Notes:     "old notes",
+		HasPhoto:  true,
+	}
+	logs.entries = []model.LogEntry{saved}
+	edited := postForm(t, router, "/log/"+saved.ID.String(), map[string]string{
+		"visited_on":       "2026-10-20",
+		"notes":            "fresh mud",
+		"duration_minutes": "nope",
+		"remove_photo":     "1",
+	})
+	if edited.Code != http.StatusBadRequest {
+		t.Fatalf("edit status = %d", edited.Code)
+	}
+	body = edited.Body.String()
+	for _, want := range []string{"fresh mud", "2026-10-20", `value="nope"`, "whole number", "checked"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("edit response missing %q\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "old notes") {
+		t.Fatal("edit response kept the saved notes instead of the draft")
+	}
+	if logs.entries[0].Notes != "old notes" {
+		t.Fatal("rejected edit changed the stored notes")
+	}
+}
+
+func postForm(t *testing.T, handler http.Handler, path string, fields map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for name, value := range fields {
+		if err := writer.WriteField(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "http://example.test"+path, &body)
+	req.Host = "example.test"
+	req.Header.Set("Origin", "http://example.test")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec
 }
 
 func get(t *testing.T, handler http.Handler, path string) *httptest.ResponseRecorder {

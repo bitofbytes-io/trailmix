@@ -164,7 +164,7 @@ func (h *Handler) Trail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.renderTrail(w, r, id, "")
+	h.renderTrail(w, r, id, "", entryDraft{})
 }
 
 // CreateLog stores a visit for a trail.
@@ -197,7 +197,7 @@ func (h *Handler) Entry(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.renderEntry(w, r, id, "")
+	h.renderEntry(w, r, id, "", entryDraft{})
 }
 
 // UpdateLog saves notes, the date, and an optional photo.
@@ -277,7 +277,7 @@ func (h *Handler) catalog(ctx context.Context) ([]model.Trail, []model.Park, []m
 	return trails, parks, rules, nil
 }
 
-func (h *Handler) renderTrail(w http.ResponseWriter, r *http.Request, id uuid.UUID, message string) {
+func (h *Handler) renderTrail(w http.ResponseWriter, r *http.Request, id uuid.UUID, message string, draft entryDraft) {
 	trail, err := h.trails.GetTrail(r.Context(), id)
 	if errors.Is(err, repository.ErrNotFound) {
 		h.notFound(w, r, "That trail is not in the catalog.")
@@ -292,13 +292,23 @@ func (h *Handler) renderTrail(w http.ResponseWriter, r *http.Request, id uuid.UU
 		h.fail(w, r, err)
 		return
 	}
+	visited := ncToday(h.now()).String()
+	notes := ""
+	duration := ""
+	if draft.Present {
+		visited = draft.VisitedOn
+		notes = draft.Notes
+		duration = draft.Duration
+	}
 	view := pages.TrailView{
 		TrailItem:     presentTrail(trail),
 		Source:        trail.Source,
 		Confidence:    confidence(trail.Confidence),
 		LowConfidence: trail.Confidence < 0.5,
 		Sample:        trail.Sample,
-		Today:         formatISO(ncToday(h.now())),
+		Visited:       visited,
+		Notes:         notes,
+		Duration:      duration,
 		Map:           h.maps.Render(lines),
 		Error:         message,
 	}
@@ -309,7 +319,7 @@ func (h *Handler) renderTrail(w http.ResponseWriter, r *http.Request, id uuid.UU
 	h.render(w, r, status, pages.TrailPage(view))
 }
 
-func (h *Handler) renderEntry(w http.ResponseWriter, r *http.Request, id uuid.UUID, message string) {
+func (h *Handler) renderEntry(w http.ResponseWriter, r *http.Request, id uuid.UUID, message string, draft entryDraft) {
 	entry, err := h.logs.GetEntry(r.Context(), id)
 	if errors.Is(err, repository.ErrNotFound) {
 		h.notFound(w, r, "That log entry is not here.")
@@ -320,6 +330,12 @@ func (h *Handler) renderEntry(w http.ResponseWriter, r *http.Request, id uuid.UU
 		return
 	}
 	view := pages.EntryView{LogItem: presentLog(entry, entry.ID), Error: message}
+	if draft.Present {
+		view.VisitedISO = draft.VisitedOn
+		view.Notes = draft.Notes
+		view.DurationInput = draft.Duration
+		view.RemovePhoto = draft.RemovePhoto
+	}
 	status := http.StatusOK
 	if message != "" {
 		status = http.StatusBadRequest
@@ -338,10 +354,10 @@ func (h *Handler) rejectEntry(w http.ResponseWriter, r *http.Request, trailID, e
 		return
 	}
 	if entryID != uuid.Nil {
-		h.renderEntry(w, r, entryID, formErr.Error())
+		h.renderEntry(w, r, entryID, formErr.Error(), formErr.draft)
 		return
 	}
-	h.renderTrail(w, r, trailID, formErr.Error())
+	h.renderTrail(w, r, trailID, formErr.Error(), formErr.draft)
 }
 
 func (h *Handler) parseID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
