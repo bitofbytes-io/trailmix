@@ -66,7 +66,10 @@ func run() error {
 	}
 	slog.Info("connected to database")
 
-	assetsVersion, err := assets.Version(filepath.Join("static", "styles.css"))
+	assetsVersion, err := assets.Version(
+		filepath.Join("static", "styles.css"),
+		filepath.Join("static", "map.js"),
+	)
 	if err != nil {
 		slog.Warn("asset version unavailable", "error", err)
 	} else {

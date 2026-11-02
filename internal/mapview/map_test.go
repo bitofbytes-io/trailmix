@@ -1,62 +1,35 @@
 package mapview
 
 import (
-	"strconv"
+	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
 
-func TestProjectEmptyAndFlatLinesStayInView(t *testing.T) {
-	if len(Project(nil)) != 0 {
-		t.Fatal("nil input should project to nothing")
+func TestRenderPassesStyleAttributionAndGeoJSONURL(t *testing.T) {
+	var buf bytes.Buffer
+	err := MapLibre{
+		StyleURL:    "https://tiles.example/topo.json",
+		Attribution: "Example Topo Survey",
+	}.Render("/api/trails.geojson?dog=prohibited").Render(context.Background(), &buf)
+	if err != nil {
+		t.Fatal(err)
 	}
-	lines := Project([]Line{{
-		ID:     "flat",
-		Name:   "Flat",
-		Points: [][2]float64{{-78.8, 35.8}, {-78.8, 35.8}},
-	}})
-	if lines[0].PointsAttr == "" {
-		t.Fatal("expected a point")
-	}
-	for _, pair := range strings.Split(lines[0].PointsAttr, " ") {
-		x, y := split(t, pair)
-		if x < 0 || x > width || y < 0 || y > height {
-			t.Fatalf("point %s is outside the viewBox", pair)
+	body := buf.String()
+	for _, want := range []string{
+		`data-style-url="https://tiles.example/topo.json"`,
+		`data-geojson="/api/trails.geojson?dog=prohibited"`,
+		"Example Topo Survey",
+		"/static/vendor/maplibre/maplibre-gl.css",
+		"/static/map.js",
+		"Trail map",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("map HTML missing %q\n%s", want, body)
 		}
 	}
-}
-
-func TestProjectNorthIsUpAndSelectionIsKept(t *testing.T) {
-	lines := Project([]Line{{
-		ID:       "north",
-		Name:     "North",
-		Selected: true,
-		Points:   [][2]float64{{-78.8, 35.7}, {-78.8, 35.9}},
-	}})
-	if !lines[0].Selected {
-		t.Fatal("selection was dropped")
+	if strings.Contains(body, "openfreemap.org") {
+		t.Fatal("renderer hardcoded the default style instead of using the configured URL")
 	}
-	parts := strings.Split(lines[0].PointsAttr, " ")
-	_, south := split(t, parts[0])
-	_, north := split(t, parts[1])
-	if north >= south {
-		t.Fatalf("north y %v is not above south y %v", north, south)
-	}
-}
-
-func split(t *testing.T, pair string) (float64, float64) {
-	t.Helper()
-	xRaw, yRaw, ok := strings.Cut(pair, ",")
-	if !ok {
-		t.Fatalf("bad point %q", pair)
-	}
-	x, err := strconv.ParseFloat(xRaw, 64)
-	if err != nil {
-		t.Fatal(err)
-	}
-	y, err := strconv.ParseFloat(yRaw, 64)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return x, y
 }

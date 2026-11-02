@@ -245,29 +245,40 @@ input, select, textarea {
 	margin: 0.5rem 0 1rem;
 }
 
-.map-frame svg { display: block; width: 100%; height: auto; }
-
-.map-surface { fill: #e4f0e2; }
-
-.map-line {
-	fill: none;
-	stroke: var(--pine);
-	stroke-width: 3;
-	stroke-linejoin: round;
-	stroke-linecap: round;
+.trail-map {
+	height: 420px;
+	width: 100%;
+	background: #d7e4d6;
 }
 
-.map-line-selected { stroke: var(--clay); stroke-width: 5; }
+.map-status {
+	margin: 0;
+	padding: 0.45rem 0.9rem 0;
+	color: var(--bark);
+}
 
-.map-frame figcaption { padding: 0.7rem 1rem 1rem; }
+.map-status:empty { display: none; }
 
-.map-frame figcaption ul {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.35rem 1rem;
-	margin: 0.4rem 0 0;
-	padding: 0;
-	list-style: none;
+.map-attribution {
+	margin: 0;
+	padding: 0.4rem 0.9rem 0.75rem;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.map-popup strong { display: block; }
+.map-popup p { margin: 0.15rem 0; }
+.map-popup a { font-weight: 700; }
+
+.maplibregl-popup-content {
+	font-family: "Source Sans 3", "Segoe UI", sans-serif;
+	color: var(--ink);
+	border-radius: 0.6rem;
+	padding: 0.55rem 0.7rem;
+}
+
+.maplibregl-ctrl-attrib {
+	font-size: 11px;
 }
 
 :focus-visible {

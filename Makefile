@@ -54,11 +54,11 @@ migrate-status: ## Show migration status
 test: templ tail-prod ## Generate assets and run Go tests
 	go test -v ./...
 
-# Local stack: app and Postgres, with sample trails seeded by migrations.
-up: ## Build and start the app and Postgres (seeded sample data)
+# Local stack: app and PostGIS, with sample trails seeded by migrations.
+up: ## Build and start the app and PostGIS (seeded sample data)
 	docker compose up --build
 
-down: ## Stop the local app and Postgres
+down: ## Stop the local app and PostGIS
 	docker compose down
 
 # Docker (production image). CI would set METADATA_FILE to read the pushed digest.

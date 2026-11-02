@@ -13,7 +13,7 @@ import (
 )
 
 func TestParseEntryFormRejectsFutureDate(t *testing.T) {
-	h := New(nil, nil, mapview.Placeholder{})
+	h := New(nil, nil, mapview.MapLibre{})
 	h.now = func() time.Time { return time.Date(2026, 11, 2, 15, 0, 0, 0, time.UTC) }
 
 	var body bytes.Buffer
@@ -34,7 +34,7 @@ func TestParseEntryFormRejectsFutureDate(t *testing.T) {
 }
 
 func TestParseEntryFormAcceptsToday(t *testing.T) {
-	h := New(nil, nil, mapview.Placeholder{})
+	h := New(nil, nil, mapview.MapLibre{})
 	h.now = func() time.Time { return time.Date(2026, 11, 2, 15, 0, 0, 0, time.UTC) }
 
 	var body bytes.Buffer

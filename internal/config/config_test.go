@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -24,6 +25,8 @@ func TestLoadReadsDatabaseURLFile(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("SECURE_COOKIES", "false")
+	t.Setenv("MAP_STYLE_URL", "")
+	t.Setenv("MAP_ATTRIBUTION", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -36,6 +39,41 @@ func TestLoadReadsDatabaseURLFile(t *testing.T) {
 	}
 	if cfg.SecureCookies {
 		t.Fatal("SECURE_COOKIES=false should disable secure cookies")
+	}
+	if cfg.MapStyleURL != DefaultMapStyleURL || cfg.MapAttribution != DefaultMapAttribution {
+		t.Fatalf("map config = %q %q", cfg.MapStyleURL, cfg.MapAttribution)
+	}
+	if !strings.Contains(cfg.MapAttribution, "OpenStreetMap") || !strings.Contains(cfg.MapStyleURL, "openfreemap.org") {
+		t.Fatalf("default map provider = %q %q", cfg.MapStyleURL, cfg.MapAttribution)
+	}
+}
+
+func TestLoadOverridesMapProvider(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://trailmix@db/trailmix")
+	t.Setenv("MAP_STYLE_URL", "https://tiles.example/topo.json")
+	t.Setenv("MAP_ATTRIBUTION", "Example Topo")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MapStyleURL != "https://tiles.example/topo.json" || cfg.MapAttribution != "Example Topo" {
+		t.Fatalf("map config = %q %q", cfg.MapStyleURL, cfg.MapAttribution)
+	}
+}
+
+func TestLoadRejectsMapStyleThatIsNotAnHTTPURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://trailmix@db/trailmix")
+	t.Setenv("MAP_STYLE_URL", "ftp://tiles.example/style.json")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected style URL error")
+	}
+}
+
+func TestLoadRejectsBlankAttribution(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://trailmix@db/trailmix")
+	t.Setenv("MAP_ATTRIBUTION", "  ")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected attribution error")
 	}
 }
 

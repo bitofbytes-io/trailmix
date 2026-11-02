@@ -1,4 +1,4 @@
-# Local Trail Mix: Postgres plus the app. Migrations seed a dozen sample trails.
+# Local Trail Mix: PostGIS plus the app. Migrations seed a dozen sample trails.
 # The database password is a local default, not a production secret. Override
 # POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB together if you change it.
 # Use URL-safe characters; the password is placed in DATABASE_URL as-is.
@@ -7,7 +7,7 @@ name: trailmix
 
 services:
   db:
-    image: postgres:17-alpine
+    image: postgis/postgis:17-3.6-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-trailmix}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trailmix}
@@ -46,6 +46,10 @@ services:
       PORT: "4600"
       SECURE_COOKIES: "false"
       LOG_LEVEL: info
+      # Empty keeps the OpenFreeMap defaults in internal/config.
+      # Set both together to point MapLibre at another style.
+      MAP_STYLE_URL: ${MAP_STYLE_URL:-}
+      MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-}
     ports:
       - "127.0.0.1:4600:4600"
     depends_on:

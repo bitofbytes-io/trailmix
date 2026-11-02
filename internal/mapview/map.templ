@@ -1,0 +1,24 @@
+package mapview
+
+import "github.com/bitofbytes-io/trailmix/internal/ui/layout"
+
+// Map is the MapLibre frame. Style, attribution, and the GeoJSON URL are
+// data attributes so static/map.js does not name a tile provider.
+templ Map(p mapProps) {
+	<figure class="map-frame">
+		<div
+			class="trail-map"
+			data-trail-map="true"
+			data-style-url={ p.StyleURL }
+			data-attribution={ p.Attribution }
+			data-geojson={ p.GeoJSONURL }
+			role="region"
+			aria-label="Trail map"
+		></div>
+		<p class="map-status" role="status"></p>
+		<noscript><p class="map-status">The map needs JavaScript. The trail list below still works.</p></noscript>
+		<figcaption class="map-attribution">{ p.Attribution }</figcaption>
+	</figure>
+	<link rel="stylesheet" href={ layout.AssetURL("/static/vendor/maplibre/maplibre-gl.css") }/>
+	<script type="module" src={ layout.AssetURL("/static/map.js") }></script>
+}

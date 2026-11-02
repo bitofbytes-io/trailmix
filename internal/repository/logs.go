@@ -17,7 +17,8 @@ import (
 const logSelect = `
 SELECT e.id, e.visited_on, e.notes, e.duration_minutes, (e.photo IS NOT NULL), e.created_at, e.updated_at,
        t.id, t.name, t.distance_miles::float8, t.elevation_gain_feet, t.grade_percent::float8,
-       t.difficulty, t.geometry, t.source, t.confidence::float8, t.sample,
+       t.difficulty, ST_AsGeoJSON(t.geometry)::text, ST_X(t.trailhead), ST_Y(t.trailhead),
+       t.source, t.confidence::float8, t.sample,
        p.id, p.name, p.county,
        d.code, d.label
 FROM log_entries e
@@ -31,6 +32,7 @@ func scanEntry(row scanner) (model.LogEntry, error) {
 	var visited pgtype.Date
 	var duration *int32
 	var geometry []byte
+	var headLon, headLat float64
 	var dogCode, difficulty string
 	err := row.Scan(
 		&entry.ID,
@@ -47,6 +49,8 @@ func scanEntry(row scanner) (model.LogEntry, error) {
 		&entry.Trail.GradePercent,
 		&difficulty,
 		&geometry,
+		&headLon,
+		&headLat,
 		&entry.Trail.Source,
 		&entry.Trail.Confidence,
 		&entry.Trail.Sample,
@@ -73,6 +77,7 @@ func scanEntry(row scanner) (model.LogEntry, error) {
 	entry.VisitedOn = day
 	entry.Trail.Difficulty = model.Difficulty(difficulty)
 	entry.Trail.DogRule.Code = model.DogRuleCode(dogCode)
+	entry.Trail.Trailhead = model.Point{Lon: headLon, Lat: headLat}
 	if err := decodeGeometry(&entry.Trail, geometry); err != nil {
 		return model.LogEntry{}, err
 	}

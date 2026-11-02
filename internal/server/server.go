@@ -18,6 +18,11 @@ func init() {
 	if err := mime.AddExtensionType(".webmanifest", "application/manifest+json"); err != nil {
 		panic(err)
 	}
+	// MapLibre is an ES module. Browsers refuse a module worker unless the
+	// script is served as JavaScript.
+	if err := mime.AddExtensionType(".mjs", "text/javascript"); err != nil {
+		panic(err)
+	}
 }
 
 // Server is the Trail Mix HTTP application.
@@ -29,10 +34,19 @@ type Server struct {
 	maps   mapview.Renderer
 }
 
-// New builds a server. A nil map renderer uses the placeholder.
+// New builds a server. A nil map renderer uses MapLibre with the configured
+// style, or the OpenFreeMap default when the style was left empty.
 func New(cfg *config.Config, db handler.Pinger, trails repository.TrailStore, logs repository.LogStore, maps mapview.Renderer) *Server {
 	if maps == nil {
-		maps = mapview.Placeholder{}
+		style := cfg.MapStyleURL
+		if style == "" {
+			style = config.DefaultMapStyleURL
+		}
+		attribution := cfg.MapAttribution
+		if attribution == "" {
+			attribution = config.DefaultMapAttribution
+		}
+		maps = mapview.MapLibre{StyleURL: style, Attribution: attribution}
 	}
 	return &Server{cfg: cfg, db: db, trails: trails, logs: logs, maps: maps}
 }
@@ -57,6 +71,8 @@ func (s *Server) Router() http.Handler {
 	r.Get("/ready", health.Ready)
 
 	pages := handler.New(s.trails, s.logs, s.maps)
+	r.Get("/api/trails.geojson", pages.TrailsGeoJSON)
+	r.Get("/api/trails/{id}/geojson", pages.TrailGeoJSON)
 	r.Get("/", pages.Home)
 	r.Get("/trails", pages.Search)
 	r.Get("/trails/random", pages.Random)
