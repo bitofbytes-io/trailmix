@@ -39,7 +39,9 @@ ARG REVISION=unknown
 ARG SOURCE_URL=https://github.com/bitofbytes-io/trailmix
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates tzdata
+# wget is what the Compose healthcheck runs. Busybox in this image does not
+# provide it.
+RUN apk add --no-cache ca-certificates tzdata wget
 
 COPY --from=builder /out/trailmix ./trailmix
 # A one-off migrate service runs this before the app on `docker compose up`.

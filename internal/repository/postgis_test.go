@@ -69,6 +69,18 @@ func TestGeometryUpdateRecomputesLengthAndTrailhead(t *testing.T) {
 		t.Fatalf("trailhead = %v,%v", lon, lat)
 	}
 
+	// A direct edit of the derived columns is overwritten on any update.
+	if _, err := pool.Exec(ctx, `UPDATE trails SET distance_miles = 9.99, grade_percent = 50 WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	var edited float64
+	if err := pool.QueryRow(ctx, `SELECT distance_miles::float8 FROM trails WHERE id = $1`, id).Scan(&edited); err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(edited-miles) > 0.01 {
+		t.Fatalf("direct edit stuck at %v, want %v", edited, miles)
+	}
+
 	trail, err := NewTrailRepository(pool).GetTrail(ctx, id)
 	if err != nil {
 		t.Fatal(err)
@@ -105,8 +117,8 @@ func assertPostGISTrails(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 		  AND ST_GeometryType(trailhead) = 'ST_Point'
 		  AND ST_SRID(trailhead) = 4326
 		  AND ST_Equals(trailhead, ST_StartPoint(geometry))
-		  AND distance_miles = public.trails_distance_miles(geometry)
-		  AND grade_percent = public.trails_grade_percent(elevation_gain_feet, distance_miles)
+		  AND distance_miles = trails_distance_miles(geometry)
+		  AND grade_percent = trails_grade_percent(elevation_gain_feet, distance_miles)
 		  AND abs(distance_miles - ST_Length(geometry::geography) / 1609.344) < 0.01
 		  AND distance_miles > 0
 	`).Scan(&n); err != nil {
@@ -159,6 +171,29 @@ func assertGeoJSONTrails(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	}
 	if dataType != "jsonb" {
 		t.Fatalf("geometry type after down = %s", dataType)
+	}
+	var nullable string
+	if err := pool.QueryRow(ctx, `
+		SELECT is_nullable FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'trails' AND column_name = 'geometry'
+	`).Scan(&nullable); err != nil {
+		t.Fatal(err)
+	}
+	if nullable != "NO" {
+		t.Fatalf("geometry nullable after down = %s", nullable)
+	}
+	var helpers int
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM pg_proc p
+		JOIN pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = current_schema()
+		  AND p.proname IN ('trails_distance_miles', 'trails_grade_percent', 'trails_sync_geometry_measures')
+	`).Scan(&helpers); err != nil {
+		t.Fatal(err)
+	}
+	if helpers != 0 {
+		t.Fatalf("schema helpers after down = %d", helpers)
 	}
 	var n int
 	if err := pool.QueryRow(ctx, `

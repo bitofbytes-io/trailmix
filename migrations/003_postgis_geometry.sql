@@ -4,21 +4,21 @@
 -- Miles are the geodesic length of the line (ST_Length on geography).
 -- Grade stays the fixture definition: elevation gain / (miles * 5280) * 100.
 -- Elevation gain is still the stored fixture; a 2D line cannot produce it.
--- The helper functions live in public so the trigger can pin search_path
--- there (PostGIS is installed in public) while tests keep tables in
--- another schema.
+-- Distance and grade helpers are created in the same schema as trails.
+-- Down drops only that schema's copies. PostGIS itself stays in public.
 
 -- +goose Up
 -- +goose StatementBegin
--- Tests migrate separate schemas at the same time. The helper functions
--- live in public, so this lock keeps those creates from colliding.
+-- Parallel tests each enable PostGIS in public. The lock keeps those
+-- CREATE EXTENSION calls from colliding. Helper functions are not shared.
 SELECT pg_advisory_xact_lock(874231001);
 
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
 
 -- Geodesic length in statute miles, rounded to 0.01 and never zero, so the
 -- distance_miles check (greater than zero) stays valid for a short line.
-CREATE OR REPLACE FUNCTION public.trails_distance_miles(line public.geometry)
+-- search_path is pinned so ST_Length resolves to PostGIS in public.
+CREATE OR REPLACE FUNCTION trails_distance_miles(line public.geometry)
 RETURNS numeric
 LANGUAGE sql
 STABLE
@@ -27,7 +27,7 @@ AS $fn$
     SELECT GREATEST(ROUND((ST_Length(line::geography) / 1609.344)::numeric, 2), 0.01::numeric);
 $fn$;
 
-CREATE OR REPLACE FUNCTION public.trails_grade_percent(gain integer, miles numeric)
+CREATE OR REPLACE FUNCTION trails_grade_percent(gain integer, miles numeric)
 RETURNS numeric
 LANGUAGE sql
 IMMUTABLE
@@ -55,21 +55,23 @@ ALTER TABLE trails RENAME COLUMN geom TO geometry;
 
 ALTER TABLE trails ADD COLUMN trailhead geometry(Point, 4326);
 
+-- No search_path pin: the helpers live in this schema, and PostGIS calls
+-- are schema-qualified. Fires on every update so a direct write to
+-- distance_miles, grade_percent, or trailhead is overwritten.
 CREATE OR REPLACE FUNCTION trails_sync_geometry_measures()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-SET search_path = public
 AS $fn$
 BEGIN
-    NEW.distance_miles := public.trails_distance_miles(NEW.geometry);
-    NEW.grade_percent := public.trails_grade_percent(NEW.elevation_gain_feet, NEW.distance_miles);
-    NEW.trailhead := ST_StartPoint(NEW.geometry);
+    NEW.distance_miles := trails_distance_miles(NEW.geometry);
+    NEW.grade_percent := trails_grade_percent(NEW.elevation_gain_feet, NEW.distance_miles);
+    NEW.trailhead := public.ST_StartPoint(NEW.geometry);
     RETURN NEW;
 END;
 $fn$;
 
 CREATE TRIGGER trails_sync_geometry_measures
-    BEFORE INSERT OR UPDATE OF geometry, elevation_gain_feet
+    BEFORE INSERT OR UPDATE
     ON trails
     FOR EACH ROW
     EXECUTE FUNCTION trails_sync_geometry_measures();
@@ -83,8 +85,8 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM trails
-        WHERE distance_miles <> public.trails_distance_miles(geometry)
-           OR grade_percent <> public.trails_grade_percent(elevation_gain_feet, distance_miles)
+        WHERE distance_miles <> trails_distance_miles(geometry)
+           OR grade_percent <> trails_grade_percent(elevation_gain_feet, distance_miles)
            OR NOT ST_Equals(trailhead, ST_StartPoint(geometry))
            OR ST_SRID(geometry) <> 4326
            OR ST_SRID(trailhead) <> 4326
@@ -105,12 +107,16 @@ COMMENT ON COLUMN trails.grade_percent IS 'Elevation gain over distance_miles, p
 
 -- +goose Down
 -- +goose StatementBegin
-SELECT pg_advisory_xact_lock(874231001);
-
-DROP TRIGGER IF EXISTS trails_sync_geometry_measures ON trails;
-DROP FUNCTION IF EXISTS trails_sync_geometry_measures();
-DROP FUNCTION IF EXISTS public.trails_distance_miles(public.geometry);
-DROP FUNCTION IF EXISTS public.trails_grade_percent(integer, numeric);
+-- Drop only this schema's helpers. Another schema migrated to 003 has its
+-- own copies, and a shared public function would break those schemas.
+DO $drop$
+BEGIN
+    EXECUTE format('DROP TRIGGER IF EXISTS trails_sync_geometry_measures ON %I.trails', current_schema());
+    EXECUTE format('DROP FUNCTION IF EXISTS %I.trails_sync_geometry_measures()', current_schema());
+    EXECUTE format('DROP FUNCTION IF EXISTS %I.trails_distance_miles(public.geometry)', current_schema());
+    EXECUTE format('DROP FUNCTION IF EXISTS %I.trails_grade_percent(integer, numeric)', current_schema());
+END
+$drop$;
 
 ALTER TABLE trails ADD COLUMN geometry_json JSONB;
 UPDATE trails SET geometry_json = ST_AsGeoJSON(geometry)::jsonb;
@@ -121,6 +127,7 @@ DROP INDEX IF EXISTS idx_trails_trailhead;
 ALTER TABLE trails DROP COLUMN trailhead;
 ALTER TABLE trails DROP COLUMN geometry;
 ALTER TABLE trails RENAME COLUMN geometry_json TO geometry;
+ALTER TABLE trails ALTER COLUMN geometry SET NOT NULL;
 
 ALTER TABLE trails ADD CONSTRAINT trails_geometry_linestring CHECK (
     jsonb_typeof(geometry) = 'object'

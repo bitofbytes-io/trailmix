@@ -17,7 +17,11 @@ import (
 	"github.com/google/uuid"
 )
 
-var errBadSelected = errors.New("Selected trail is not a valid id.")
+// errBadSelected is the sentinel. The sentence shown to the client is separate
+// so the error value can stay a staticcheck-friendly lowercase string.
+var errBadSelected = errors.New("selected trail is not a valid id")
+
+const selectedTrailMessage = "Selected trail is not a valid id."
 
 type featureCollection struct {
 	Type     string    `json:"type"`
@@ -61,7 +65,7 @@ func (h *Handler) TrailsGeoJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	selected, err := selectedTrailID(r.URL.Query())
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeJSONError(w, http.StatusBadRequest, selectedTrailMessage)
 		return
 	}
 	logged, err := h.loggedTrailIDs(r.Context())

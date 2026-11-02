@@ -1,8 +1,17 @@
 // MapLibre GL JS 6.16.0 (static/vendor/maplibre).
 // The style URL and attribution are data attributes rendered from config
 // (MAP_STYLE_URL and MAP_ATTRIBUTION). This file does not name a provider.
+//
+// The vendor module is imported with the same asset query as this file.
+// MapLibre replaces a "v" parameter with its own library version when it
+// loads the worker, so the cache buster uses "asset" instead.
 
-import * as maplibregl from "/static/vendor/maplibre/maplibre-gl.mjs";
+const maplibreURL = new URL("/static/vendor/maplibre/maplibre-gl.mjs", import.meta.url);
+const assetVersion = new URL(import.meta.url).searchParams.get("v");
+if (assetVersion) {
+  maplibreURL.searchParams.set("asset", assetVersion);
+}
+const maplibregl = await import(maplibreURL.href);
 
 // Cary, North Carolina. Used until a trail collection arrives.
 const fallbackCenter = [-78.78, 35.79];
@@ -118,6 +127,17 @@ async function mount(el) {
   // caption under the map is the configured credit (MAP_ATTRIBUTION), so
   // it is not added here a second time.
   map.addControl(new maplibregl.AttributionControl({ compact: false }));
+
+  let styleLoaded = false;
+  map.on("style.load", () => {
+    styleLoaded = true;
+  });
+  map.on("error", (event) => {
+    if (styleLoaded || (event && event.sourceId)) {
+      return;
+    }
+    setStatus(el, "The map style could not be loaded.");
+  });
 
   map.on("load", async () => {
     let data;
