@@ -55,7 +55,7 @@ Use this when you want `go run` instead of the app container. Postgres still has
 
 Requirements:
 
-- Go 1.26.10 (the `go` directive in `go.mod`)
+- Go 1.26.11 (the `go` directive in `go.mod`)
 - The [Tailwind CSS standalone CLI](https://github.com/tailwindlabs/tailwindcss/releases) v4.3.0 on your `PATH`, named `tailwindcss`
 - [Goose](https://github.com/pressly/goose) for `make migrate`
 - PostgreSQL 17 with PostGIS 3.6 (the Compose database image)
