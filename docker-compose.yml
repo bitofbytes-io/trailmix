@@ -7,7 +7,7 @@ name: trailmix
 
 services:
   db:
-    image: postgis/postgis:17-3.6-alpine
+    image: postgis/postgis:18-3.6-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-trailmix}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trailmix}
