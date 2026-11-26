@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 
-FROM golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS builder
+FROM golang:1.27.4-alpine3.23@sha256:f70850ef6ce341e8b6427f677049145d63c0b7ce002d4d7e3d464828b1b96dcd AS builder
 ARG VERSION=dev
 ARG REVISION=unknown
 ARG TARGETARCH
@@ -33,7 +33,7 @@ RUN go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate \
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.version=${VERSION} -X main.revision=${REVISION}" -o /out/trailmix ./cmd/trailmix \
  && CGO_ENABLED=0 GOOS=linux go build -o /out/trailmix-migrate ./cmd/trailmix-migrate
 
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 ARG VERSION=dev
 ARG REVISION=unknown
 ARG SOURCE_URL=https://github.com/bitofbytes-io/trailmix
