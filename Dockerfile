@@ -27,7 +27,7 @@ RUN go mod download
 # Generated templ and CSS are untracked. Build them here so `docker compose up`
 # works from a fresh clone. templ version matches go.mod.
 COPY . .
-RUN go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate \
+RUN go run github.com/a-h/templ/cmd/templ@v0.3.1118 generate \
  && /usr/local/bin/tailwindcss -i ./tailwind/styles.css -o ./static/styles.css --minify
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.version=${VERSION} -X main.revision=${REVISION}" -o /out/trailmix ./cmd/trailmix \
